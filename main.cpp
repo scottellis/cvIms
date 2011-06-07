@@ -16,6 +16,8 @@
 #include <opencv/cv.h>
 #include <opencv/highgui.h>
 
+#define BOUNDING_RECT_PADDING 5
+
 IplImage* binarize_image();
 void find_contours(IplImage *binImg);
 
@@ -61,8 +63,38 @@ int main(int argc, char **argv)
 	return 0;
 }
 
+void summarize_object(int index, CvSeq *seq)
+{
+	double perimeter, area;
+	CvRect bounding_rect;
+
+	perimeter = cvContourPerimeter(seq);
+	area = cvContourArea(seq, CV_WHOLE_SEQ);
+	
+	bounding_rect = cvBoundingRect(seq, 0);
+
+	printf("Object[%d]: Perimeter: %0.2lf  Area: %0.2lf\n", 
+		index, perimeter, area);
+}
+
+void draw_bounding_rect(IplImage *img, CvContour *seq)
+{
+	CvPoint topLeft, bottomRight;
+	CvScalar color;
+	
+	color = cvScalarAll(255);
+
+	topLeft.x = seq->rect.x - BOUNDING_RECT_PADDING;
+	topLeft.y = seq->rect.y - BOUNDING_RECT_PADDING;
+	bottomRight.x = seq->rect.x + seq->rect.width + BOUNDING_RECT_PADDING;
+	bottomRight.y = seq->rect.y + seq->rect.height + BOUNDING_RECT_PADDING;
+
+	cvRectangle(img, topLeft, bottomRight, color, 1, 8, 0);
+}
+
 void find_contours(IplImage *binImg)
 {
+	int i;
 	IplImage *contourImg;
 	CvSeq *seq;
 	CvContourScanner scanner;
@@ -82,19 +114,25 @@ void find_contours(IplImage *binImg)
 					CV_RETR_EXTERNAL, 
 					CV_CHAIN_APPROX_SIMPLE);
 
+	i = 1;
 	seq = cvFindNextContour(scanner);
 
 	while (seq) {
+		summarize_object(i, seq);
+
 		cvZero(contourImg);
 
 		cvDrawContours(contourImg, seq, 
 				cvScalarAll(255), cvScalarAll(127), 
 				2, 1, 8);
 
+		draw_bounding_rect(contourImg, (CvContour *)seq);
+
 		cvShowImage("contours", contourImg);
 		cvWaitKey(0);
 
 		seq = cvFindNextContour(scanner);
+		i++;
 	}
 
 	cvReleaseImage(&contourImg);
@@ -114,7 +152,7 @@ IplImage* binarize_image()
 	calImg = cvLoadImage(buff, CV_LOAD_IMAGE_GRAYSCALE);
 
 	strcpy(buff, project_dir);
-	strcat(buff, "rawfile_000000.tif");
+	strcat(buff, "rawfile_000106.tif");
 	rawImg = cvLoadImage(buff, CV_LOAD_IMAGE_GRAYSCALE);
 
 	maskedImg = cvCreateImage(cvGetSize(rawImg), rawImg->depth, 1);
@@ -123,7 +161,7 @@ IplImage* binarize_image()
 	if (calImg && rawImg && maskedImg && binImg) {
 		//cvSub(calImg, rawImg, binImg, NULL);
 		cvAbsDiff(calImg, rawImg, maskedImg);
-		cvThreshold(maskedImg, binImg, 18.0, 255.0, CV_THRESH_BINARY);
+		cvThreshold(maskedImg, binImg, 10.0, 255.0, CV_THRESH_BINARY);
 		cvShowImage("raw", rawImg);
 		cvShowImage("masked", maskedImg);
 		cvShowImage("binarized", binImg);		
